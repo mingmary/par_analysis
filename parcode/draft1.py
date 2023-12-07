@@ -4,8 +4,11 @@ usage: python3 draft1.py
 """
 
 import re
+import subprocess
 
 gap1file = "/data_01/mmintsev/paris/iPSC/Set18-8_iPSC_rep1_CGTGAT_gaptypes_filtered.gap1.sorted.sam"
+homofile = "/data_01/mmintsev/paris/iPSC/Set18-8_iPSC_rep1_CGTGAT_gaptypes_homo.sorted.sam"
+rrifile = "/data_01/mmintsev/paris/iPSC/Set18-8_iPSC_rep1_CGTGAT_gaptypes_rri.sorted.sam"
 outputfile = "/data_01/mmintsev/paris/iPSC/Set18-8_iPSC_rep2_ACATCG_gaptypes_total.sam"
 
 """
@@ -23,8 +26,26 @@ gap1_filtered file is filtered line by line so that:
 	- Two modified lines derived from 1 original line per read are written in the temporary output file
 - reads that are recognized by STAR as chimeric are processed as following:
 	- The original line is written to the output file without chimeric tags
-	- The coordinates in the original line are changed to the coordinates with the coordinates from SA:Z: tag
+	- The coordinates in the original line are changed to the coordinates from SA:Z: tag
 	- Modified line is written in the output file without 
+
+def homotorri - transforms homo sorted SAM file to rri format
+logic:
+temporary SAM file is created
+homo file is filtered line by line so that:
+- header is written to the output file 
+- reads (recognized by STAR as chimeric only) are processed as following:
+	- The original line is written to the output file without chimeric tags
+	- The coordinates in the original line are changed to the coordinates from SA:Z: tag
+	- Modified line is written in the output file without 
+
+def rriaddtag - adds "rri" tag to all the lines of the original sorted SAM file
+logic:
+temporary SAM file is created
+rri file is being processed line by line so that:
+- header is written to the output file 
+- reads are rewritten as in the original file but the "rri" tag is added to the end of each line 
+
 """
 
 def gap1torri (gap1file):
@@ -65,20 +86,47 @@ def gap1torri (gap1file):
 								else:	
 									cigar2 = str(befosum) + "N" + cigarlist[-1]
 								curline[5] = cigar1	
-								gap1reformed.write('\t'.join(map(str, curline))) #writing two lines with non-overlapping cigar strings for further annotation
+								gap1reformed.write(('\t'.join(map(str, curline)))[:-1] + "\tgap1\n") #writing two lines with non-overlapping cigar strings for further annotation
 								curline[5] = cigar2
 								curline[3] = str(pos2)
-								gap1reformed.write('\t'.join(map(str, curline)))
+								gap1reformed.write(('\t'.join(map(str, curline)))[:-1] + "\tgap1\n")
 						elif len(curline) == 21: #19 for standart gap1 or 21 for chimeric
-							gap1reformed.write('\t'.join(map(str, curline[:-2])) + "\n")
+							gap1reformed.write('\t'.join(map(str, curline[:-2])) + "\tgap1\n")
 							chimera = (curline[-1]).split(",") #SA:Z:chr1,179085836,+,7S29M48H,255,0;
 							curline[2] = ((chimera[0]).split(":"))[-1] #chromosome
 							curline[3] = chimera[1] #position
 							curline[5] = chimera[3] #cigar
 							curline[15] = "NM:i:" + (chimera[-1])[:-2]#NM
 							curline[14] = "nM:i:" + (chimera[-1])[:-2]#nm
-							gap1reformed.write('\t'.join(map(str, curline[:-2])) +"\n")
-						else: 
-							print(curline)	
+							gap1reformed.write('\t'.join(map(str, curline[:-2])) +"\tgap1\n")	
 
-gap1torri(gap1file)							
+def homotorri(homofile):
+	homoreformed = open("tmp.homo.sam", "w") #temporary homo file
+	with open(homofile) as homo:
+		for line in homo:
+			if line.startswith("@"): #keeping the header
+				homoreformed.write(line)
+			else:
+				curline = line.split("\t")
+				homoreformed.write('\t'.join(map(str, curline[:-2])) + "\thomo\n")
+				chimera = (curline[-1]).split(",") #SA:Z:chr1,179085836,+,7S29M48H,255,0;
+				curline[2] = ((chimera[0]).split(":"))[-1] #chromosome
+				curline[3] = chimera[1] #position
+				curline[5] = chimera[3] #cigar
+				curline[15] = "NM:i:" + (chimera[-1])[:-2]#NM
+				curline[14] = "nM:i:" + (chimera[-1])[:-2]#nm
+				homoreformed.write('\t'.join(map(str, curline[:-2])) +"\thomo\n")	
+
+def rriaddtag(rrifile):				
+	rrireformed = open("tmp.rri.sam", "w") #temporary homo file
+	with open(rrifile) as rri:
+		for line in rri:
+			if line.startswith("@"): #keeping the header
+				rrireformed.write(line)
+			else:
+				rrireformed.write(line[:-1] + "\trri\n")
+
+
+gap1torri(gap1file)	
+homotorri(homofile)
+rriaddtag(rrifile)
